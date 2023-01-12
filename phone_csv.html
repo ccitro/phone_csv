@@ -59,6 +59,22 @@ License: MIT
         <input id="country_column" placeholder="B" />
     </label>
 
+    <label>
+        <span>Delimiter</span>
+        <input id="delimiter" value=";" />
+    </label>
+
+    <label>
+        <span>Trim from end</span>
+        <input id="trim_char" value="," />
+    </label>
+
+    <label>
+        <span>Remove spaces from Intl Phones</span>
+        <input id="remove_intl_space" type="checkbox" />
+    </label>
+
+
     <button id="run">Fix</button>
 
     <br>
@@ -90,7 +106,7 @@ const addDebug = (message) => {
     debug.scrollTop = debug.scrollHeight;
 };
 
-const fixPhone = (c, p) => {
+const fixPhone = (c, p, t) => {
     const f = libphonenumber.parsePhoneNumber(String(p).replace(/\+/g, ""), String(c));
     const result = f.formatInternational();
     if (!libphonenumber.isValidPhoneNumber(result, String(c))) {
@@ -101,7 +117,7 @@ const fixPhone = (c, p) => {
         return f.formatNational();
     }
 
-    return result.replace(/ /g, "");
+    return t ? result.replace(/ /g, "") : result;
 };
 
 const drop_target = document.getElementById("drop_target");
@@ -155,17 +171,35 @@ document.getElementById("run").addEventListener("click", () => {
         return;
     }
 
+    const remove_intl_space = document.getElementById('remove_intl_space')?.checked ?? false;
     const country_col_id = excelColumnToNumber(country_column);
+    const delimiter = document.getElementById('delimiter')?.value ?? undefined;
+    const trim_char = document.getElementById('trim_char')?.value ?? "";
+    let quoteChar = document.getElementById('quote_char')?.value ?? "";
+    const fastmode = quoteChar === "";
+    if (quoteChar === "") {
+        quoteChar = '"';
+    }
+    const newline = csv_data.indexOf("\r\n") === -1 ? "\n" : "\r\n";
 
     let line = 0;
     let new_rows = [];
     Papa.parse(csv_data, {
-        worker: true,
+        delimiter,
+        fastmode,
+        newline,
+        quoteChar,
         step: function (row) {
             line++;
             if (row.errors.length > 0) {
                 addDebug("Error parsing row: " + JSON.stringify(row));
                 return;
+            }
+
+            if (trim_char && row.data?.length > 0) {
+                while (row.data[row.data.length-1].substr(-1) === trim_char) {
+                    row.data[row.data.length-1] = row.data[row.data.length-1].substr(0, row.data[row.data.length-1].length-1);
+                }
             }
 
             if (line % 100 === 0) {
@@ -181,10 +215,14 @@ document.getElementById("run").addEventListener("click", () => {
             const country = data[country_col_id - 1];
             for (const col of phone_col_ids) {
                 const orig_phone = data[col - 1];
+                if (orig_phone.trim() === "") {
+                    continue;
+                }
                 try {
-                    data[col - 1] = fixPhone(country, data[col - 1]);
+                    data[col - 1] = fixPhone(country, data[col - 1], remove_intl_space);
                 } catch (err) {
-                    addDebug(`Failed to parse phone on line #${line} ('${data[col - 1]}': ${err})`);
+                    addDebug(`Failed to parse phone on line #${line}.  country='${country}', column=${col} phone=${orig_phone}.  Error: ${err})`);
+                    addDebug(``);
                 }
             }
 
@@ -192,10 +230,9 @@ document.getElementById("run").addEventListener("click", () => {
         },
         complete: function () {
             addDebug(`Complete! ${line} lines processed`);
-            const content = "data:text/csv;charset=utf-8," + Papa.unparse(new_rows);
-            const encodedUri = encodeURI(content);
+            const file = new Blob([Papa.unparse(new_rows)], {type: "text/plain"});
             const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
+            link.setAttribute("href", URL.createObjectURL(file));
             link.setAttribute("download", "fixed_data.csv");
             document.body.appendChild(link);
 
