@@ -153,18 +153,33 @@ const addDebug = (message) => {
     debug.scrollTop = debug.scrollHeight;
 };
 
-const fixPhone = (c, p, t) => {
-    const f = libphonenumber.parsePhoneNumber(String(p).replace(/\+/g, ""), String(c));
-    const result = f.formatInternational();
-    if (!libphonenumber.isValidPhoneNumber(result, String(c))) {
-        return String(p);
-    }
-
-    if (String(c) === "US") {
-        return f.formatNational();
-    }
-
-    return t ? result.replace(/ /g, "") : result;
+const fixPhone = (c, p, t) => { 
+    const input = String(p).replace(/\+/g, ""); 
+    let f = libphonenumber.parsePhoneNumber(input, String(c)); 
+    let result = f.formatInternational(); 
+    let invalid = !libphonenumber.isValidPhoneNumber(result, String(c)); 
+ 
+    if (invalid && input.substr(0, 2) === "11") { 
+        f = libphonenumber.parsePhoneNumber(input.substr(2), String(c)); 
+        result = f.formatInternational(); 
+        invalid = !libphonenumber.isValidPhoneNumber(result, String(c)); 
+    } 
+ 
+    if (invalid && input.substr(0, 3) === "011") { 
+        f = libphonenumber.parsePhoneNumber(input.substr(3), String(c)); 
+        result = f.formatInternational(); 
+        invalid = !libphonenumber.isValidPhoneNumber(result, String(c)); 
+    } 
+ 
+    if (invalid) { 
+        return String(p); 
+    } 
+ 
+    if (String(c) === "US") { 
+        return f.formatNational(); 
+    } 
+ 
+    return t ? result.replace(/ /g, "") : result; 
 };
 
 const readFile = (f) => {
